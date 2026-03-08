@@ -97,9 +97,12 @@ MultiGeometry mergeGeometry(std::vector<MultiGeometry> && aGeometries)
 {
   MultiGeometry merged;
   for (auto && geometry : aGeometries)
+  {
     for (auto && line : geometry.m_lines)
       merged.m_lines.push_back(std::move(line));
-
+    for (auto && timestamps : geometry.m_timestamps)
+      merged.m_timestamps.push_back(std::move(timestamps));
+  }
   return merged;
 }
 

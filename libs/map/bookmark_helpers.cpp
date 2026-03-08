@@ -245,11 +245,8 @@ void RemoveDuplicatedTrackPoints(std::unique_ptr<kml::FileData> & data)
         MYTHROW(kml::DeserializerKml::DeserializeException,
                 ("Timestamps count", timestamps.size(), "doesn't match points count", line.size()));
 
-      validGeometry.m_lines.emplace_back();
-      validGeometry.m_timestamps.emplace_back();
-
-      auto & validLine = validGeometry.m_lines.back();
-      auto & validTimestamps = validGeometry.m_timestamps.back();
+      kml::MultiGeometry::LineT validLine;
+      kml::MultiGeometry::TimeT validTimestamps;
 
       for (size_t pointIndex = 0; pointIndex < line.size(); ++pointIndex)
       {
@@ -265,10 +262,31 @@ void RemoveDuplicatedTrackPoints(std::unique_ptr<kml::FileData> & data)
             validTimestamps.push_back(timestamps[pointIndex]);
         }
       }
+
+      // A valid track segment needs at least 2 distinct points. Discard lines that
+      // collapse to a single point after deduplication; saving them would produce a
+      // one-coordinate <LineString> in KML that is silently dropped on the next
+      // load, leaving the track with no geometry and crashing Track::Track().
+      if (validLine.size() > 1)
+      {
+        validGeometry.m_lines.push_back(std::move(validLine));
+        validGeometry.m_timestamps.push_back(std::move(validTimestamps));
+      }
+      else
+      {
+        LOG(LWARNING, ("Track line reduced to less than 2 points after deduplication, skipping"));
+      }
     }
 
     trackData.m_geometry = std::move(validGeometry);
   }
+
+  // Remove tracks whose geometry became entirely empty after deduplication.
+  // Keeping them would cause a crash in Track::Track() via CHECK(IsValid()).
+  auto & tracks = data->m_tracksData;
+  tracks.erase(std::remove_if(tracks.begin(), tracks.end(),
+                              [](kml::TrackData const & t) { return !t.m_geometry.IsValid(); }),
+               tracks.end());
 }
 
 bool IsBadCharForPath(strings::UniChar c)
