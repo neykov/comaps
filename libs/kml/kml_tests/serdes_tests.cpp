@@ -640,6 +640,33 @@ UNIT_TEST(Kml_Deserialization_From_KMB_V9MM_With_MultiGeometry)
 
   TEST_EQUAL(line1.size(), 3, ());
   TEST_EQUAL(line2.size(), 3, ());
+
+  // Regression: timestamps must be merged alongside lines (Bug 2).
+  // Before the fix mergeGeometry copied m_lines but left m_timestamps empty,
+  // causing HasTimestampsFor() to crash with an out-of-bounds access.
+  auto const & ts = dataFromBinV9MM.m_tracksData[0].m_geometry.m_timestamps;
+  TEST_EQUAL(ts.size(), lines.size(), ());
+}
+
+// Regression: mergeGeometry must copy m_timestamps alongside m_lines.
+// TT24B-like case: geometry with one segment whose timestamps were discarded by
+// CheckAndCorrectTimestamps() (>50% of trkpt elements had no <time> tag).
+// Before the fix, the merged geometry had m_timestamps.size()==0 while
+// m_lines.size()==1, causing an assertion / out-of-bounds crash in
+// HasTimestampsFor() on the next startup.
+UNIT_TEST(MergeGeometry_PreservesTimestampsInvariant)
+{
+  kml::MultiGeometry g;
+  g.m_lines.push_back({{m2::PointD(0, 0), 0}, {m2::PointD(1, 0), 0}, {m2::PointD(2, 0), 0}});
+  g.m_timestamps.push_back({});  // empty: simulates timestamps cleared at import
+
+  std::vector<kml::MultiGeometry> geometries;
+  geometries.push_back(std::move(g));
+  kml::MultiGeometry const merged = kml::mergeGeometry(std::move(geometries));
+
+  TEST_EQUAL(merged.m_lines.size(), merged.m_timestamps.size(), ());
+  TEST_EQUAL(merged.m_lines.size(), 1, ());
+  TEST(merged.m_timestamps[0].empty(), ());
 }
 
 UNIT_TEST(Kml_Ver_2_3)

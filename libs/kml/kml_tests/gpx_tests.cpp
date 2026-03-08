@@ -156,6 +156,36 @@ UNIT_TEST(Gpx_Test_Track_Without_Timestamps)
   }
 }
 
+// Regression: GPX with >50% of trkpt elements lacking <time> must discard all
+// timestamps (CheckAndCorrectTimestamps), while preserving the geometry and the
+// m_lines.size() == m_timestamps.size() invariant.  TT24B-like track.
+UNIT_TEST(Gpx_MixedTimestamps_MajorityInvalid)
+{
+  std::string_view constexpr input = R"(<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1">
+ <trk>
+  <trkseg>
+   <trkpt lat="42.0" lon="0.0"/>
+   <trkpt lat="42.1" lon="0.1"><time>2023-01-01T10:00:00Z</time></trkpt>
+   <trkpt lat="42.2" lon="0.2"/>
+  </trkseg>
+ </trk>
+</gpx>)";
+
+  kml::FileData const data = LoadGpxFromString(input);
+  TEST_EQUAL(data.m_tracksData.size(), 1, ());
+  auto const & geom = data.m_tracksData[0].m_geometry;
+
+  // Invariant: lines and timestamps vectors must always have the same size.
+  TEST_EQUAL(geom.m_lines.size(), geom.m_timestamps.size(), ());
+  TEST_EQUAL(geom.m_lines.size(), 1, ());
+  TEST_EQUAL(geom.m_lines[0].size(), 3, ());
+
+  // 2 out of 3 points lack <time> (>50% invalid) → all timestamps must be discarded.
+  TEST(geom.m_timestamps[0].empty(), ());
+  TEST(!geom.HasTimestamps(), ());
+}
+
 UNIT_TEST(Gpx_Test_Track_With_Timestamps)
 {
   auto const fileName = "test_data/gpx/track_with_timestamps.gpx";
