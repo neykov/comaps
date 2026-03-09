@@ -34,5 +34,10 @@ private:
   bool HasNoPoints() const;
 
   geometry::PointWithAltitude m_previousPoint;
+  geometry::Altitude m_lastConfirmedAltitude;
   double m_previousTimestamp;
+
+  // Минимална промяна в надм. височина (метри), която се брои за реално изкачване/спускане.
+  // Елиминира GPS шум (типично ±3–10 м) от натрупването.
+  static constexpr int kElevationThresholdMeters = 8;
 };

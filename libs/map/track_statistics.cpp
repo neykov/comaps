@@ -20,6 +20,7 @@ TrackStatistics::TrackStatistics()
   , m_minElevation(geometry::kDefaultAltitudeMeters)
   , m_maxElevation(geometry::kDefaultAltitudeMeters)
   , m_previousPoint(kInvalidPoint)
+  , m_lastConfirmedAltitude(geometry::kInvalidAltitude)
   , m_previousTimestamp(kInvalidTimestamp)
 {}
 
@@ -47,6 +48,7 @@ void TrackStatistics::AddGpsInfoPoint(location::GpsInfo const & point)
     m_minElevation = altitude;
     m_maxElevation = altitude;
     m_previousPoint = pointWithAltitude;
+    m_lastConfirmedAltitude = altitude;
     m_previousTimestamp = point.m_timestamp;
     return;
   }
@@ -54,11 +56,17 @@ void TrackStatistics::AddGpsInfoPoint(location::GpsInfo const & point)
   m_minElevation = std::min(m_minElevation, altitude);
   m_maxElevation = std::max(m_maxElevation, altitude);
 
-  auto const deltaAltitude = altitude - m_previousPoint.GetAltitude();
-  if (deltaAltitude > 0)
+  auto const deltaAltitude = altitude - m_lastConfirmedAltitude;
+  if (deltaAltitude >= kElevationThresholdMeters)
+  {
     m_ascent += deltaAltitude;
-  else
+    m_lastConfirmedAltitude = altitude;
+  }
+  else if (deltaAltitude <= -kElevationThresholdMeters)
+  {
     m_descent -= deltaAltitude;
+    m_lastConfirmedAltitude = altitude;
+  }
   m_length += mercator::DistanceOnEarth(m_previousPoint.GetPoint(), pointWithAltitude.GetPoint());
   m_duration += point.m_timestamp - m_previousTimestamp;
 
@@ -77,6 +85,8 @@ void TrackStatistics::AddPoints(Points const & points)
 
   m_minElevation = hasNoPoints ? altitude : std::min(m_minElevation, altitude);
   m_maxElevation = hasNoPoints ? altitude : std::max(m_maxElevation, altitude);
+  // Reset per segment — всеки сегмент е независим начална точка за elevation baseline.
+  m_lastConfirmedAltitude = altitude;
   m_previousPoint = firstPoint;
 
   for (size_t i = 1; i < points.size(); ++i)
@@ -87,11 +97,17 @@ void TrackStatistics::AddPoints(Points const & points)
     m_minElevation = std::min(m_minElevation, pointAltitude);
     m_maxElevation = std::max(m_maxElevation, pointAltitude);
 
-    auto const deltaAltitude = pointAltitude - m_previousPoint.GetAltitude();
-    if (deltaAltitude > 0)
+    auto const deltaAltitude = pointAltitude - m_lastConfirmedAltitude;
+    if (deltaAltitude >= kElevationThresholdMeters)
+    {
       m_ascent += deltaAltitude;
-    else
+      m_lastConfirmedAltitude = pointAltitude;
+    }
+    else if (deltaAltitude <= -kElevationThresholdMeters)
+    {
       m_descent -= deltaAltitude;
+      m_lastConfirmedAltitude = pointAltitude;
+    }
     m_length += mercator::DistanceOnEarth(m_previousPoint.GetPoint(), point.GetPoint());
 
     m_previousPoint = point;

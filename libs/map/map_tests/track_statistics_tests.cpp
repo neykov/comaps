@@ -118,6 +118,7 @@ UNIT_TEST(TrackStatistics_PositiveAndNegativeAltitudes)
 
 UNIT_TEST(TrackStatistics_SmallAltitudeDelta)
 {
+  // Промени под kElevationThresholdMeters (8 м) се игнорират — GPS шум.
   std::vector<GpsInfo> const points = {BuildGpsInfo(0.0, 0.0, 0),   BuildGpsInfo(1.0, 1.0, 0.2),
                                        BuildGpsInfo(2.0, 2.0, 0.4), BuildGpsInfo(3.0, 3.0, 0.6),
                                        BuildGpsInfo(4.0, 4.0, 0.8), BuildGpsInfo(5.0, 5.0, 1.0)};
@@ -127,9 +128,41 @@ UNIT_TEST(TrackStatistics_SmallAltitudeDelta)
     ts.AddGpsInfoPoint(point);
 
   TEST_EQUAL(ts.m_minElevation, 0, ());
-  TEST_EQUAL(ts.m_maxElevation, 1.0, ());
-  TEST_EQUAL(ts.m_ascent, 1.0, ());
+  TEST_EQUAL(ts.m_maxElevation, 1, ());
+  TEST_EQUAL(ts.m_ascent, 0, ());
   TEST_EQUAL(ts.m_descent, 0, ());
+}
+
+UNIT_TEST(TrackStatistics_ElevationNoiseFilter)
+{
+  // Симулация на GPS шум върху плосък терен: осцилации ±5 м около 500 м.
+  // Без филтър: фиктивно изкачване ~30 м. С филтър (8 м праг): 0 м.
+  std::vector<GpsInfo> const points = {
+      BuildGpsInfo(0.0, 0.0, 500), BuildGpsInfo(1.0, 0.0, 505), BuildGpsInfo(2.0, 0.0, 498),
+      BuildGpsInfo(3.0, 0.0, 503), BuildGpsInfo(4.0, 0.0, 497), BuildGpsInfo(5.0, 0.0, 504),
+      BuildGpsInfo(6.0, 0.0, 499), BuildGpsInfo(7.0, 0.0, 502), BuildGpsInfo(8.0, 0.0, 500)};
+
+  TrackStatistics ts;
+  for (auto const & point : points)
+    ts.AddGpsInfoPoint(point);
+
+  TEST_EQUAL(ts.m_ascent, 0, ());
+  TEST_EQUAL(ts.m_descent, 0, ());
+}
+
+UNIT_TEST(TrackStatistics_RealClimbAboveThreshold)
+{
+  // Реално изкачване: 500 м → 520 м → 510 м (20 м нагоре, 10 м надолу).
+  // Всички промени надвишават прага от 8 м.
+  std::vector<GpsInfo> const points = {BuildGpsInfo(0.0, 0.0, 500), BuildGpsInfo(1.0, 0.0, 520),
+                                       BuildGpsInfo(2.0, 0.0, 510)};
+
+  TrackStatistics ts;
+  for (auto const & point : points)
+    ts.AddGpsInfoPoint(point);
+
+  TEST_EQUAL(ts.m_ascent, 20, ());
+  TEST_EQUAL(ts.m_descent, 10, ());
 }
 
 UNIT_TEST(TrackStatistics_MixedMultiGeometryAndGpsPoints)
