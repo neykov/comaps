@@ -55,6 +55,11 @@ NS_SWIFT_NAME(FrameworkHelper)
 + (void)showOnMap:(MWMMarkGroupID)categoryId;
 + (void)showBookmark:(MWMMarkID)bookmarkId;
 + (void)showTrack:(MWMTrackID)trackId;
+/// Ids of all recorded tracks under the last tap, sorted nearest-first. Empty when there is no selection.
+/// Used to disambiguate overlapping tracks or a track sitting close to a POI.
++ (NSArray<NSNumber *> *)trackIdsAtCurrentTap;
+/// Opens the place page for the given track at the last tapped position (used by the track chooser).
++ (void)selectTrackAtCurrentTap:(MWMTrackID)trackId;
 + (void)saveRouteAsTrack;
 + (void)updatePlacePageData;
 + (void)updateAfterDeleteBookmark;

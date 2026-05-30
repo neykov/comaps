@@ -88,6 +88,9 @@ NSString *const kAboutSegue = @"Map2About";
 
 @property(nonatomic) BOOL skipForceTouch;
 
+// YES while a selection is being resolved from the track disambiguation chooser, to avoid re-presenting it.
+@property(nonatomic) BOOL resolvingTrackDisambiguation;
+
 @property(strong, nonatomic) IBOutlet NSLayoutConstraint *visibleAreaBottom;
 @property(strong, nonatomic) IBOutlet NSLayoutConstraint *visibleAreaKeyboard;
 @property(strong, nonatomic) IBOutlet NSLayoutConstraint *placePageAreaKeyboard;
@@ -249,7 +252,50 @@ NSString *const kAboutSegue = @"Map2About";
   }
   PlacePageData * data = [[PlacePageData alloc] initWithLocalizationProvider:[[OpeinigHoursLocalization alloc] init]];
   [self stopObservingTrackRecordingUpdates];
+
+  // When several tracks overlap, or a track sits under a POI, offer a chooser instead of guessing.
+  if (!self.resolvingTrackDisambiguation && [self presentTrackDisambiguationIfNeededForData:data]) {
+    return;
+  }
+  self.resolvingTrackDisambiguation = NO;
+
   [self showOrUpdatePlacePage:data];
+}
+
+// Shows a chooser when the tap could resolve to more than one object (overlapping tracks and/or a nearby
+// POI). Returns YES when the chooser was presented and the caller should not show the place page directly.
+- (BOOL)presentTrackDisambiguationIfNeededForData:(PlacePageData *)data {
+  // An in-progress track recording is not a selectable saved track.
+  if (data.objectType == PlacePageObjectTypeTrackRecording)
+    return NO;
+
+  NSArray<NSNumber *> * trackIds = [MWMFrameworkHelper trackIdsAtCurrentTap];
+  BOOL const selectionIsTrack = (data.objectType == PlacePageObjectTypeTrack);
+  NSString * poiTitle = selectionIsTrack ? nil : data.previewData.title;
+  // Candidates: every track under the tap, plus the POI/bookmark when the tap also hit one (with a title).
+  NSUInteger const candidateCount = trackIds.count + (poiTitle.length > 0 ? 1 : 0);
+  if (candidateCount < 2)
+    return NO;
+  __weak __typeof(self) weakSelf = self;
+  TrackDisambiguationViewController * chooser = [[TrackDisambiguationViewController alloc]
+      initWithTrackIds:trackIds
+              poiTitle:poiTitle
+         onSelectTrack:^(MWMTrackID trackId) {
+           __strong __typeof(weakSelf) self = weakSelf;
+           if (self == nil)
+             return;
+           self.resolvingTrackDisambiguation = YES;
+           [MWMFrameworkHelper selectTrackAtCurrentTap:trackId];
+         }
+           onSelectPOI:^{
+             __strong __typeof(weakSelf) self = weakSelf;
+             [self showOrUpdatePlacePage:data];
+           }
+              onCancel:^{
+                [MWMFrameworkHelper deactivateMapSelection];
+              }];
+  [self presentViewController:[chooser makePresentableController] animated:YES completion:nil];
+  return YES;
 }
 
 - (void)onMapObjectUpdated {

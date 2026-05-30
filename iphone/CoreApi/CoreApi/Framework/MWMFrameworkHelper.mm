@@ -182,6 +182,28 @@
   GetFramework().ShowTrack(trackId);
 }
 
++ (NSArray<NSNumber *> *)trackIdsAtCurrentTap {
+  auto & f = GetFramework();
+  if (!f.HasPlacePageInfo())
+    return @[];
+  auto const candidates = f.FindTracksInTapPosition(f.GetCurrentPlacePageInfo().GetBuildInfo());
+  NSMutableArray<NSNumber *> * result = [NSMutableArray arrayWithCapacity:candidates.size()];
+  for (auto const & c : candidates)
+    [result addObject:@(static_cast<MWMTrackID>(c.m_trackId))];
+  return result;
+}
+
++ (void)selectTrackAtCurrentTap:(MWMTrackID)trackId {
+  auto & f = GetFramework();
+  if (!f.HasPlacePageInfo())
+    return;
+  // Re-run selection forcing this specific track at the tapped position (TrackOnly skips POIs/user marks).
+  auto buildInfo = f.GetCurrentPlacePageInfo().GetBuildInfo();
+  buildInfo.m_trackId = static_cast<kml::TrackId>(trackId);
+  buildInfo.m_match = place_page::BuildInfo::Match::TrackOnly;
+  f.BuildAndSetPlacePageInfo(buildInfo);
+}
+
 + (void)saveRouteAsTrack {
   GetFramework().SaveRoute();
 }
