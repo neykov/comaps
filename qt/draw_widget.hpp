@@ -95,6 +95,9 @@ private:
   void SubmitRoutingPoint(m2::PointD const & pt, bool pointIsMercator);
   void SubmitBookmark(m2::PointD const & pt);
   void ShowPlacePage();
+  // Shows a chooser when a tap resolves to several objects (overlapping tracks and/or a nearby POI).
+  // Returns true when the chooser handled the selection and ShowPlacePage should not continue.
+  bool ShowTrackDisambiguationIfNeeded();
 
   void VisualizeMwmsBordersInRect(m2::RectD const & rect, bool withVertices, bool fromPackedPolygon, bool boundingBox);
 
@@ -105,6 +108,10 @@ private:
   QPoint m_rubberBandOrigin;
 
   bool m_emulatingLocation;
+
+  // True while a selection chosen from the track disambiguation chooser is being applied, to avoid
+  // re-presenting the chooser for the resulting place page.
+  bool m_resolvingTrackDisambiguation = false;
 
 public:
   /// Pass empty \a mode to drop selection.

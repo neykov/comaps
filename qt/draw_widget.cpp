@@ -24,6 +24,7 @@
 
 #include "indexer/editable_map_object.hpp"
 
+#include "platform/distance.hpp"
 #include "platform/platform.hpp"
 
 #include "coding/reader.hpp"
@@ -38,8 +39,11 @@
 #include <QtGui/QGuiApplication>
 #include <QtGui/QMouseEvent>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QDialog>
 #include <QtWidgets/QDialogButtonBox>
+#include <QtWidgets/QListWidget>
 #include <QtWidgets/QMenu>
+#include <QtWidgets/QVBoxLayout>
 
 #include <string>
 #include <vector>
@@ -660,6 +664,10 @@ void DrawWidget::OnRouteRecommendation(RoutingManager::Recommendation recommenda
 
 void DrawWidget::ShowPlacePage()
 {
+  if (!m_resolvingTrackDisambiguation && ShowTrackDisambiguationIfNeeded())
+    return;
+  m_resolvingTrackDisambiguation = false;
+
   place_page::Info const & info = m_framework.GetCurrentPlacePageInfo();
   search::ReverseGeocoder::Address address;
   if (info.IsFeature())
@@ -725,6 +733,72 @@ void DrawWidget::ShowPlacePage()
   default: break;
   }
   m_framework.DeactivateMapSelection();
+}
+
+bool DrawWidget::ShowTrackDisambiguationIfNeeded()
+{
+  place_page::Info const & info = m_framework.GetCurrentPlacePageInfo();
+
+  auto const candidates = m_framework.FindTracksInTapPosition(info.GetBuildInfo());
+  bool const selectionIsTrack = info.IsTrack();
+  // The POI/bookmark under the tap is an extra candidate, unless the tap already resolved to a track.
+  std::string const poiTitle = selectionIsTrack ? std::string() : info.GetTitle();
+  size_t const candidateCount = candidates.size() + (poiTitle.empty() ? 0 : 1);
+  if (candidateCount < 2)
+    return false;
+
+  // GetBuildInfo() references the current place page info, which BuildAndSetPlacePageInfo would replace.
+  auto const buildInfo = info.GetBuildInfo();
+
+  QDialog dialog(this);
+  dialog.setWindowTitle("Select a track");
+  QListWidget * list = new QListWidget(&dialog);
+
+  auto const & bm = m_framework.GetBookmarkManager();
+  if (!poiTitle.empty())
+  {
+    auto * item = new QListWidgetItem(QString::fromStdString(poiTitle), list);
+    item->setData(Qt::UserRole, QVariant::fromValue<qulonglong>(kml::kInvalidTrackId));
+  }
+  for (auto const & candidate : candidates)
+  {
+    auto const * track = bm.GetTrack(candidate.m_trackId);
+    if (track == nullptr)
+      continue;
+    std::string label = track->GetName();
+    if (label.empty())
+      label = "Track";
+    label += " (" + platform::Distance::CreateFormatted(track->GetLengthMeters()).ToString() + ")";
+    auto * item = new QListWidgetItem(QString::fromStdString(label), list);
+    item->setData(Qt::UserRole, QVariant::fromValue<qulonglong>(candidate.m_trackId));
+  }
+  list->setCurrentRow(0);
+
+  QDialogButtonBox * buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+  connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+  connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+  connect(list, &QListWidget::itemDoubleClicked, &dialog, &QDialog::accept);
+
+  QVBoxLayout * layout = new QVBoxLayout(&dialog);
+  layout->addWidget(list);
+  layout->addWidget(buttons);
+
+  if (dialog.exec() != QDialog::Accepted || list->currentItem() == nullptr)
+  {
+    m_framework.DeactivateMapSelection();
+    return true;
+  }
+
+  auto const chosenId = static_cast<kml::TrackId>(list->currentItem()->data(Qt::UserRole).toULongLong());
+  if (chosenId == kml::kInvalidTrackId)
+    return false;  // The POI was chosen: let ShowPlacePage display its place page.
+
+  auto selectInfo = buildInfo;
+  selectInfo.m_trackId = chosenId;
+  selectInfo.m_match = place_page::BuildInfo::Match::TrackOnly;
+  m_resolvingTrackDisambiguation = true;
+  m_framework.BuildAndSetPlacePageInfo(selectInfo);
+  return true;
 }
 
 void DrawWidget::SetRuler(bool enabled)
