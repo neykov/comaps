@@ -2699,6 +2699,20 @@ m2::AnyRectD TapInfo::GetBookmarkTapRect(m2::PointD const & mercator, ScreenBase
 }
 
 // static
+m2::AnyRectD TapInfo::GetTrackTapRect(m2::PointD const & mercator, ScreenBase const & screen)
+{
+  // Tracks are thin lines, so enlarge the touch area (similar to bookmarks) to make them easier to select,
+  // especially when several tracks overlap or run close to a POI.
+  static int constexpr kTrackTouchPixelIncrease = 20;
+
+  m2::AnyRectD result;
+  double const addition = kTrackTouchPixelIncrease * VisualParams::Instance().GetVisualScale();
+  double const halfSize = VisualParams::Instance().GetTouchRectRadius();
+  screen.GetTouchRect(screen.GtoP(mercator), halfSize + addition, result);
+  return result;
+}
+
+// static
 m2::AnyRectD TapInfo::GetRoutingPointTapRect(m2::PointD const & mercator, ScreenBase const & screen)
 {
   static int constexpr kRoutingPointTouchPixelIncrease = 20;

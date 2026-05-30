@@ -2233,7 +2233,12 @@ place_page::Info Framework::BuildPlacePageInfo(place_page::BuildInfo const & bui
     if (buildInfo.m_trackId != kml::kInvalidTrackId)
     {
       auto const & track = *GetBookmarkManager().GetTrack(buildInfo.m_trackId);
-      track.UpdateSelectionInfo(track.GetLimitRect(), trackSelectionInfo);
+      // Prefer the point nearest to the tap (e.g. when a specific track was picked from the disambiguation
+      // chooser), falling back to the whole track when the tap is not close to its geometry.
+      auto const touchRect = df::TapInfo::GetTrackTapRect(buildInfo.m_mercator, m_currentModelView).GetGlobalRect();
+      track.UpdateSelectionInfo(touchRect, trackSelectionInfo);
+      if (trackSelectionInfo.m_trackId == kml::kInvalidTrackId)
+        track.UpdateSelectionInfo(track.GetLimitRect(), trackSelectionInfo);
     }
     else
       trackSelectionInfo = FindTrackInTapPosition(buildInfo);
@@ -2311,8 +2316,16 @@ Track::TrackSelectionInfo Framework::FindTrackInTapPosition(place_page::BuildInf
     CHECK_NOT_EQUAL(selection.m_trackId, kml::kInvalidTrackId, ());
     return selection;
   }
-  auto const touchRect = df::TapInfo::GetDefaultTapRect(buildInfo.m_mercator, m_currentModelView).GetGlobalRect();
+  auto const touchRect = df::TapInfo::GetTrackTapRect(buildInfo.m_mercator, m_currentModelView).GetGlobalRect();
   return bm.FindNearestTrack(touchRect);
+}
+
+std::vector<Track::TrackSelectionInfo> Framework::FindTracksInTapPosition(place_page::BuildInfo const & buildInfo) const
+{
+  if (m_drapeEngine == nullptr)
+    return {};
+  auto const touchRect = df::TapInfo::GetTrackTapRect(buildInfo.m_mercator, m_currentModelView).GetGlobalRect();
+  return GetBookmarkManager().FindTracksInTapPosition(touchRect);
 }
 
 UserMark const * Framework::FindUserMarkInTapPosition(place_page::BuildInfo const & buildInfo) const

@@ -922,6 +922,37 @@ Track::TrackSelectionInfo BookmarkManager::FindNearestTrack(m2::RectD const & to
   return selectionInfo;
 }
 
+std::vector<Track::TrackSelectionInfo> BookmarkManager::FindTracksInTapPosition(m2::RectD const & touchRect,
+                                                                                TracksFilter const & tracksFilter) const
+{
+  CHECK_THREAD_CHECKER(m_threadChecker, ());
+  std::vector<Track::TrackSelectionInfo> result;
+
+  for (auto const & pair : m_categories)
+  {
+    auto const & category = *pair.second;
+    if (!category.IsVisible())
+      continue;
+
+    for (auto trackId : category.GetUserLines())
+    {
+      auto const track = GetTrack(trackId);
+      if (tracksFilter && !tracksFilter(track))
+        continue;
+
+      Track::TrackSelectionInfo selectionInfo;
+      track->UpdateSelectionInfo(touchRect, selectionInfo);
+      if (selectionInfo.m_trackId != kml::kInvalidTrackId)
+        result.push_back(selectionInfo);
+    }
+  }
+
+  std::sort(result.begin(), result.end(), [](Track::TrackSelectionInfo const & lhs, Track::TrackSelectionInfo const & rhs)
+  { return lhs.m_squareDist < rhs.m_squareDist; });
+
+  return result;
+}
+
 Track::TrackSelectionInfo BookmarkManager::GetTrackSelectionInfo(kml::TrackId const & trackId) const
 {
   CHECK_THREAD_CHECKER(m_threadChecker, ());

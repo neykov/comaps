@@ -354,6 +354,10 @@ public:
   place_page::Info & GetCurrentPlacePageInfo();
   void BuildAndSetPlacePageInfo(place_page::BuildInfo const & buildInfo) { OnTapEvent(buildInfo); }
 
+  // Returns the selection info for every visible track under the tap, sorted nearest-first. The UI uses this
+  // to show a disambiguation chooser when several tracks overlap or run close to a POI.
+  std::vector<Track::TrackSelectionInfo> FindTracksInTapPosition(place_page::BuildInfo const & buildInfo) const;
+
   void InvalidateRendering();
   void EnableDebugRectRendering(bool enabled);
 

@@ -430,6 +430,10 @@ public:
   using TracksFilter = std::function<bool(Track const * track)>;
   Track::TrackSelectionInfo FindNearestTrack(m2::RectD const & touchRect,
                                              TracksFilter const & tracksFilter = nullptr) const;
+  // Returns the selection info for every visible track that intersects touchRect, sorted by ascending
+  // distance to the touch center (nearest first). Used to disambiguate overlapping/close tracks on tap.
+  std::vector<Track::TrackSelectionInfo> FindTracksInTapPosition(m2::RectD const & touchRect,
+                                                                 TracksFilter const & tracksFilter = nullptr) const;
   Track::TrackSelectionInfo GetTrackSelectionInfo(kml::TrackId const & trackId) const;
 
   void SetTrackSelectionInfo(Track::TrackSelectionInfo const & trackSelectionInfo, bool notifyListeners);
