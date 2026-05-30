@@ -300,6 +300,14 @@ public class Framework
   @NonNull
   public static native MapObject nativeDeleteBookmarkFromMapObject();
 
+  // Ids of all recorded tracks under the last tap, sorted nearest-first, to disambiguate
+  // overlapping tracks or a track running close to a POI.
+  @NonNull
+  public static native long[] nativeGetTrackIdsAtCurrentTap();
+
+  // Opens the place page for the given track at the last tapped position (used by the track chooser).
+  public static native void nativeSelectTrackAtCurrentTap(long trackId);
+
   @NonNull
   public static native String nativeGetPoiContactUrl(int metadataType);
 

@@ -1608,6 +1608,36 @@ JNIEXPORT jobject JNICALL Java_app_organicmaps_sdk_Framework_nativeDeleteBookmar
   return usermark_helper::CreateMapObject(env, g_framework->GetPlacePageInfo());
 }
 
+// Returns the ids of all recorded tracks under the last tap, sorted nearest-first, to let the UI
+// disambiguate overlapping tracks or a track running close to a POI.
+JNIEXPORT jlongArray JNICALL Java_app_organicmaps_sdk_Framework_nativeGetTrackIdsAtCurrentTap(JNIEnv * env, jclass)
+{
+  if (!frm()->HasPlacePageInfo())
+    return env->NewLongArray(0);
+
+  auto const candidates = frm()->FindTracksInTapPosition(frm()->GetCurrentPlacePageInfo().GetBuildInfo());
+  std::vector<jlong> ids;
+  ids.reserve(candidates.size());
+  for (auto const & candidate : candidates)
+    ids.push_back(static_cast<jlong>(candidate.m_trackId));
+
+  jlongArray const result = env->NewLongArray(static_cast<jsize>(ids.size()));
+  if (!ids.empty())
+    env->SetLongArrayRegion(result, 0, static_cast<jsize>(ids.size()), ids.data());
+  return result;
+}
+
+// Opens the place page for the given track at the last tapped position (used by the track chooser).
+JNIEXPORT void JNICALL Java_app_organicmaps_sdk_Framework_nativeSelectTrackAtCurrentTap(JNIEnv *, jclass, jlong trackId)
+{
+  if (!frm()->HasPlacePageInfo())
+    return;
+  auto buildInfo = frm()->GetCurrentPlacePageInfo().GetBuildInfo();
+  buildInfo.m_trackId = static_cast<kml::TrackId>(trackId);
+  buildInfo.m_match = place_page::BuildInfo::Match::TrackOnly;
+  frm()->BuildAndSetPlacePageInfo(buildInfo);
+}
+
 JNIEXPORT jstring JNICALL Java_app_organicmaps_sdk_Framework_nativeGetPoiContactUrl(JNIEnv * env, jclass, jint id)
 {
   auto const metaID = static_cast<osm::MapObject::MetadataID>(id);

@@ -88,6 +88,7 @@ import app.organicmaps.sdk.PlacePageActivationListener;
 import app.organicmaps.sdk.Router;
 import app.organicmaps.sdk.bookmarks.data.BookmarkManager;
 import app.organicmaps.sdk.bookmarks.data.MapObject;
+import app.organicmaps.sdk.bookmarks.data.Track;
 import app.organicmaps.sdk.display.DisplayChangedListener;
 import app.organicmaps.sdk.display.DisplayManager;
 import app.organicmaps.sdk.display.DisplayType;
@@ -152,6 +153,8 @@ public class MwmActivity extends BaseMwmFragmentActivity
   public static final String EXTRA_UPDATE_THEME = "update_theme";
   private static final String EXTRA_CONSUMED = "mwm.extra.intent.processed";
   private boolean mPreciseLocationDialogShown = false;
+  // True while applying a selection chosen from the track disambiguation chooser, to avoid re-showing it.
+  private boolean mResolvingTrackDisambiguation = false;
 
   private static final String[] DOCKED_FRAGMENTS = {SearchFragment.class.getName(), DownloaderFragment.class.getName(),
                                                     RoutingPlanFragment.class.getName(), EditorHostFragment.class.getName()};
@@ -1344,8 +1347,62 @@ public class MwmActivity extends BaseMwmFragmentActivity
   @Override
   public void onPlacePageActivated(@NonNull PlacePageData data)
   {
+    // When several tracks overlap, or a track sits under a POI, let the user pick which to open.
+    if (!mResolvingTrackDisambiguation && showTrackDisambiguationIfNeeded(data))
+      return;
+    mResolvingTrackDisambiguation = false;
+
     // This will open the place page
     mPlacePageViewModel.setMapObject((MapObject) data);
+  }
+
+  // Shows a chooser when a tap could resolve to more than one object (overlapping tracks and/or a
+  // nearby POI). Returns true when the chooser was shown and the place page should not open yet.
+  private boolean showTrackDisambiguationIfNeeded(@NonNull PlacePageData data)
+  {
+    final MapObject mapObject = (MapObject) data;
+    final boolean selectionIsTrack = mapObject instanceof Track;
+    final long[] trackIds = Framework.nativeGetTrackIdsAtCurrentTap();
+    final String poiTitle = selectionIsTrack ? null : mapObject.getTitle();
+    final boolean hasPoi = poiTitle != null && !poiTitle.isEmpty();
+
+    final ArrayList<CharSequence> labels = new ArrayList<>();
+    final ArrayList<Long> ids = new ArrayList<>();  // -1 marks the POI/bookmark row.
+    if (hasPoi)
+    {
+      labels.add(poiTitle);
+      ids.add(-1L);
+    }
+    for (final long trackId : trackIds)
+    {
+      final Track track = BookmarkManager.INSTANCE.getTrack(trackId);
+      if (track == null)
+        continue;
+      String name = track.getName();
+      if (name == null || name.isEmpty())
+        name = getString(R.string.tracks_title);
+      labels.add(name + " (" + track.getLength().toString(this) + ")");
+      ids.add(trackId);
+    }
+
+    if (ids.size() < 2)
+      return false;
+
+    new MaterialAlertDialogBuilder(this)
+        .setTitle(R.string.tracks_title)
+        .setItems(labels.toArray(new CharSequence[0]), (dialog, which) -> {
+          final long chosenId = ids.get(which);
+          if (chosenId == -1L)
+            mPlacePageViewModel.setMapObject(mapObject);
+          else
+          {
+            mResolvingTrackDisambiguation = true;
+            Framework.nativeSelectTrackAtCurrentTap(chosenId);
+          }
+        })
+        .setOnCancelListener(dialog -> Framework.nativeDeactivatePopup())
+        .show();
+    return true;
   }
 
   @Override
